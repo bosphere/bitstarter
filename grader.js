@@ -22,9 +22,11 @@ References:
 */
 
 var fs = require('fs');
+var rest = require('restler');
 var program = require('commander');
 var cheerio = require('cheerio');
-var HTMLFILE_DEFAULT = "index.html";
+var HTMLFILE_DEFAULT = "not-provided";
+var HTMLURL_DEFAULT = "not-provided";
 var CHECKSFILE_DEFAULT = "checks.json";
 
 var assertFileExists = function(infile) {
@@ -34,6 +36,31 @@ var assertFileExists = function(infile) {
         process.exit(1); // http://nodejs.org/api/process.html#process_process_exit_code
     }
     return instr;
+};
+
+var assertUrlValid = function(url) {
+	var urlStr = url.toString();
+	var re = /^http/;
+	if(!urlStr.match(re)) {
+		concole.log("%s is not a valid URL. Exiting.", urlStr);
+		process.exit(1);
+	}
+	return urlStr;
+}
+
+var buildfn = function(checkFile) {
+    var response2console = function(result, response) {
+        if (result instanceof Error) {
+            console.error('Error: ' + util.format(response.message));
+        } else {
+			//console.error("Wrote to file: temp");
+			fs.writeFileSync("temp", result);
+    		var checkJson = checkHtmlFile("temp", checkFile);
+    		var outJson = JSON.stringify(checkJson, null, 4);
+    		console.log(outJson);
+        }
+    };
+    return response2console;
 };
 
 var cheerioHtmlFile = function(htmlfile) {
@@ -65,10 +92,19 @@ if(require.main == module) {
     program
         .option('-c, --checks <check_file>', 'Path to checks.json', clone(assertFileExists), CHECKSFILE_DEFAULT)
         .option('-f, --file <html_file>', 'Path to index.html', clone(assertFileExists), HTMLFILE_DEFAULT)
+        .option('-u, --url <URL>', 'URL to index.html', clone(assertUrlValid), HTMLURL_DEFAULT)
         .parse(process.argv);
-    var checkJson = checkHtmlFile(program.file, program.checks);
-    var outJson = JSON.stringify(checkJson, null, 4);
-    console.log(outJson);
+	
+	if(program.file == "not-provided" && program.url == "not-provided") {
+		console.log("Either file or url needs to be provided");
+		process.exit(1);
+	} else if(program.file != "not-provided") {
+    	var checkJson = checkHtmlFile(program.file, program.checks);
+    	var outJson = JSON.stringify(checkJson, null, 4);
+    	console.log(outJson);
+	} else {
+		rest.get(program.url).on("complete", buildfn(program.checks));
+	}
 } else {
     exports.checkHtmlFile = checkHtmlFile;
 }
